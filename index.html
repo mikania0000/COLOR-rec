@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 文字與數字掃描器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 載入 Tesseract.js -->
+    <script src="https://unpkg.com/tesseract.js@4.0.1/dist/tesseract.min.js"></script>
+    <style>
+        .scan-line {
+            position: absolute;
+            width: 100%;
+            height: 2px;
+            background: rgba(59, 130, 246, 0.8);
+            box-shadow: 0 0 8px rgba(59, 130, 246, 0.8);
+            top: 0;
+            animation: scan 2s linear infinite;
+            display: none;
+        }
+        @keyframes scan {
+            0% { top: 0; }
+            100% { top: 100%; }
+        }
+        .loading-spinner {
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top: 3px solid #fff;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-slate-900 min-h-screen font-sans text-slate-100">
+
+    <div class="max-w-md mx-auto min-h-screen flex flex-col shadow-2xl bg-slate-800">
+        <!-- Header -->
+        <header class="p-6 text-center border-b border-slate-700">
+            <h1 class="text-xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
+                AI 文字與數字掃描器
+            </h1>
+            <p class="text-slate-400 text-xs mt-1">支援中英數混合辨識</p>
+        </header>
+
+        <!-- 相機預覽區 -->
+        <main class="flex-grow p-4 space-y-4">
+            <div class="relative bg-black rounded-2xl overflow-hidden aspect-[3/4] shadow-inner border border-slate-700">
+                <video id="cameraVideo" autoplay playsinline class="w-full h-full object-cover"></video>
+                
+                <!-- 掃描動畫線 -->
+                <div id="scanLine" class="scan-line"></div>
+
+                <!-- 狀態遮罩 -->
+                <div id="statusOverlay" class="absolute inset-0 bg-slate-900/70 hidden flex-col items-center justify-center space-y-3 transition-opacity">
+                    <div class="loading-spinner"></div>
+                    <p id="progressLabel" class="text-sm font-medium">分析影像中...</p>
+                    <div class="w-2/3 bg-slate-700 h-1.5 rounded-full overflow-hidden">
+                        <div id="progressBar" class="bg-blue-500 h-full w-0 transition-all duration-300"></div>
+                    </div>
+                </div>
+
+                <!-- 輔助對焦框 -->
+                <div class="absolute inset-0 border-[2px] border-white/20 pointer-events-none m-8 rounded-lg"></div>
+            </div>
+
+            <!-- 操作區 -->
+            <div class="flex flex-col space-y-3">
+                <button id="scanBtn" class="group relative bg-blue-600 hover:bg-blue-500 py-4 rounded-xl font-bold text-lg shadow-lg transition-all active:scale-95 overflow-hidden">
+                    <span class="relative z-10 flex items-center justify-center gap-2">
+                        🔍 立即掃描文字
+                    </span>
+                    <div class="absolute inset-0 bg-gradient-to-r from-blue-400 to-blue-600 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                </button>
+                
+                <div class="flex gap-2">
+                    <label class="flex-1 bg-slate-700 hover:bg-slate-600 py-3 rounded-lg text-sm font-medium text-center cursor-pointer transition-colors">
+                        📁 選擇相片
+                        <input type="file" id="fileInput" accept="image/*" class="hidden">
+                    </label>
+                    <button id="clearBtn" class="px-4 bg-slate-700 hover:bg-red-900/30 hover:text-red-400 py-3 rounded-lg text-sm transition-colors">
+                        清除
+                    </button>
+                </div>
+            </div>
+
+            <!-- 辨識結果 -->
+            <div class="bg-slate-900/50 rounded-xl p-4 border border-slate-700 space-y-2">
+                <div class="flex justify-between items-center">
+                    <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">掃描結果</span>
+                    <button id="copyBtn" class="text-xs text-blue-400 hover:text-blue-300 font-bold hidden">複製全部</button>
+                </div>
+                <div id="resultArea" class="min-h-[120px] max-h-[250px] overflow-y-auto text-slate-200 text-sm leading-relaxed whitespace-pre-wrap">
+                    請對準文字或數字，點擊「立即掃描」...
+                </div>
+            </div>
+        </main>
+
+        <canvas id="processCanvas" class="hidden"></canvas>
+    </div>
+
+    <script>
+        const video = document.getElementById('cameraVideo');
+        const canvas = document.getElementById('processCanvas');
+        const scanBtn = document.getElementById('scanBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const fileInput = document.getElementById('fileInput');
+        const resultArea = document.getElementById('resultArea');
+        const statusOverlay = document.getElementById('statusOverlay');
+        const progressBar = document.getElementById('progressBar');
+        const progressLabel = document.getElementById('progressLabel');
+        const scanLine = document.getElementById('scanLine');
+        const copyBtn = document.getElementById('copyBtn');
+
+        let isScanning = false;
+
+        // 1. 初始化相機
+        async function startCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+                    audio: false 
+                });
+                video.srcObject = stream;
+            } catch (err) {
+                resultArea.innerText = "⚠️ 無法開啟相機，請確認是否使用 HTTPS 連線或已授權權限。";
+            }
+        }
+
+        // 2. 影像預處理 (提升辨識率)
+        function preprocessImage(ctx, width, height) {
+            const imageData = ctx.getImageData(0, 0, width, height);
+            const data = imageData.data;
+            for (let i = 0; i < data.length; i += 4) {
+                // 轉灰階
+                const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
+                // 簡單二值化/增加對比
+                const threshold = avg > 128 ? 255 : 0;
+                data[i] = data[i+1] = data[i+2] = avg; // 這邊先用灰階，Tesseract 自己會處理二值化
+            }
+            ctx.putImageData(imageData, 0, 0);
+        }
+
+        // 3. 核心辨識邏輯
+        async function runOCR(source) {
+            if (isScanning) return;
+            isScanning = true;
+            
+            // UI 狀態更新
+            statusOverlay.classList.remove('hidden');
+            scanLine.style.display = 'block';
+            resultArea.classList.add('opacity-50');
+            progressBar.style.width = '0%';
+            
+            try {
+                const worker = await Tesseract.createWorker({
+                    logger: m => {
+                        if (m.status === 'recognizing text') {
+                            const p = Math.round(m.progress * 100);
+                            progressBar.style.width = `${p}%`;
+                            progressLabel.innerText = `辨識中... ${p}%`;
+                        }
+                    }
+                });
+
+                // 載入繁體中文與英文 (英文自動包含數字)
+                await worker.loadLanguage('chi_tra+eng');
+                await worker.initialize('chi_tra+eng');
+                
+                // 設定 OCR 參數，優化數字辨識
+                await worker.setParameters({
+                    tessedit_char_whitelist: '', // 如果只想辨識數字，可以設為 '0123456789'
+                });
+
+                const { data: { text } } = await worker.recognize(source);
+                
+                if (text && text.trim().length > 0) {
+                    resultArea.innerText = text.trim();
+                    copyBtn.classList.remove('hidden');
+                } else {
+                    resultArea.innerText = "無法辨識內容，請嘗試更靠近一點或改善光線。";
+                }
+
+                await worker.terminate();
+            } catch (err) {
+                resultArea.innerText = "錯誤: " + err.message;
+            } finally {
+                statusOverlay.classList.add('hidden');
+                scanLine.style.display = 'none';
+                resultArea.classList.remove('opacity-50');
+                isScanning = false;
+            }
+        }
+
+        // 按鈕事件：掃描
+        scanBtn.onclick = () => {
+            const ctx = canvas.getContext('2d');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            
+            // 抓取當前畫面
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            // 預處理
+            preprocessImage(ctx, canvas.width, canvas.height);
+            
+            const imageData = canvas.toDataURL('image/jpeg', 0.9);
+            runOCR(imageData);
+        };
+
+        // 按鈕事件：清除
+        clearBtn.onclick = () => {
+            resultArea.innerText = "請對準文字或數字，點擊「立即掃描」...";
+            copyBtn.classList.add('hidden');
+        };
+
+        // 檔案上傳
+        fileInput.onchange = (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (ev) => runOCR(ev.target.result);
+            reader.readAsDataURL(file);
+        };
+
+        // 複製功能
+        copyBtn.onclick = () => {
+            const text = resultArea.innerText;
+            const el = document.createElement('textarea');
+            el.value = text;
+            document.body.appendChild(el);
+            el.select();
+            document.execCommand('copy');
+            document.body.removeChild(el);
+            
+            const originalText = copyBtn.innerText;
+            copyBtn.innerText = "✅ 已複製";
+            setTimeout(() => copyBtn.innerText = originalText, 2000);
+        };
+
+        // 啟動
+        startCamera();
+    </script>
+</body>
+</html>
