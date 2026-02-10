@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI 萬物辨識掃描器</title>
+    <title>AI 萬物辨識掃描器 v2.2</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/tesseract.js@4.0.1/dist/tesseract.min.js"></script>
     <style>
@@ -11,11 +11,12 @@
             position: absolute;
             width: 100%;
             height: 2px;
-            background: rgba(34, 197, 94, 0.8);
-            box-shadow: 0 0 8px rgba(34, 197, 94, 0.8);
+            background: rgba(168, 85, 247, 0.8);
+            box-shadow: 0 0 10px rgba(168, 85, 247, 0.8);
             top: 0;
             animation: scan 2s linear infinite;
             display: none;
+            z-index: 10;
         }
         @keyframes scan {
             0% { top: 0; }
@@ -24,58 +25,74 @@
         .loading-spinner {
             border: 3px solid rgba(255, 255, 255, 0.3);
             border-radius: 50%;
-            border-top: 3px solid #fff;
-            width: 24px;
-            height: 24px;
+            border-top: 3px solid #a855f7;
+            width: 32px;
+            height: 32px;
             animation: spin 1s linear infinite;
         }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        .ai-glow { box-shadow: 0 0 20px rgba(168, 85, 247, 0.4); }
+        .ai-glow { box-shadow: 0 0 25px rgba(168, 85, 247, 0.4); }
+        .focus-bracket {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            border: 2px solid rgba(168, 85, 247, 0.6);
+        }
     </style>
 </head>
 <body class="bg-slate-900 min-h-screen font-sans text-slate-100">
 
     <div class="max-w-md mx-auto min-h-screen flex flex-col shadow-2xl bg-slate-800">
         <!-- Header -->
-        <header class="p-6 text-center border-b border-slate-700">
-            <h1 class="text-xl font-bold bg-gradient-to-r from-emerald-400 via-blue-400 to-purple-400 bg-clip-text text-transparent">
+        <header class="p-5 text-center border-b border-slate-700">
+            <h1 class="text-xl font-bold bg-gradient-to-r from-purple-400 via-blue-400 to-emerald-400 bg-clip-text text-transparent">
                 AI 萬物辨識掃描器
             </h1>
-            <p class="text-slate-400 text-xs mt-1">文字、數字、動物、水果全能辨識</p>
+            <div class="flex justify-center items-center gap-2 mt-1">
+                <p class="text-slate-400 text-[10px] uppercase tracking-wider">Vision Engine v2.2</p>
+                <span class="bg-purple-900/50 text-[10px] px-1.5 py-0.5 rounded text-purple-300 border border-purple-500/30 font-mono italic">Handwriting Opt.</span>
+            </div>
         </header>
 
         <!-- 相機預覽區 -->
         <main class="flex-grow p-4 space-y-4">
-            <div class="relative bg-black rounded-2xl overflow-hidden aspect-[3/4] shadow-inner border border-slate-700">
+            <div class="relative bg-black rounded-2xl overflow-hidden aspect-[3/4] shadow-inner border border-slate-700 group">
                 <video id="cameraVideo" autoplay playsinline class="w-full h-full object-cover"></video>
                 <div id="scanLine" class="scan-line"></div>
 
-                <!-- 狀態遮罩 -->
-                <div id="statusOverlay" class="absolute inset-0 bg-slate-900/80 hidden flex-col items-center justify-center space-y-4 transition-opacity z-20">
-                    <div class="loading-spinner"></div>
-                    <p id="progressLabel" class="text-sm font-medium animate-pulse text-purple-300">AI 正在深度觀察中...</p>
-                    <div id="progressContainer" class="w-2/3 bg-slate-700 h-1.5 rounded-full overflow-hidden">
-                        <div id="progressBar" class="bg-emerald-500 h-full w-0 transition-all duration-300"></div>
+                <!-- 對焦框動畫 -->
+                <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div class="w-48 h-32 border-2 border-white/20 rounded-lg flex items-center justify-center">
+                        <div class="text-[10px] text-white/40 uppercase tracking-tighter">將手寫文字置於此框</div>
                     </div>
                 </div>
 
-                <!-- 輔助框 -->
-                <div class="absolute inset-0 border-[2px] border-emerald-500/20 pointer-events-none m-8 rounded-lg"></div>
+                <!-- 狀態遮罩 -->
+                <div id="statusOverlay" class="absolute inset-0 bg-slate-900/90 hidden flex-col items-center justify-center space-y-4 transition-opacity z-20">
+                    <div class="loading-spinner"></div>
+                    <div class="text-center">
+                        <p id="progressLabel" class="text-sm font-bold text-purple-300">正在解析手寫內容...</p>
+                        <p class="text-[10px] text-slate-500 mt-1">AI 正在嘗試根據上下文推斷字跡</p>
+                    </div>
+                    <div id="progressContainer" class="w-2/3 bg-slate-700 h-1 rounded-full overflow-hidden">
+                        <div id="progressBar" class="bg-emerald-500 h-full w-0 transition-all duration-300"></div>
+                    </div>
+                </div>
             </div>
 
             <!-- 操作區 -->
             <div class="flex flex-col space-y-3">
-                <button id="aiScanBtn" class="relative bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 py-4 rounded-xl font-bold text-lg shadow-lg transition-all active:scale-95 overflow-hidden ai-glow">
+                <button id="aiScanBtn" class="relative bg-gradient-to-br from-purple-600 to-indigo-700 hover:from-purple-500 hover:to-indigo-600 py-4 rounded-xl font-bold text-lg shadow-lg transition-all active:scale-95 overflow-hidden ai-glow">
                     <span class="relative z-10 flex items-center justify-center gap-2">
-                        ✨ AI 智慧辨識 (含物件/手寫)
+                        ✨ AI 智慧掃描 (支援手寫)
                     </span>
                 </button>
                 
                 <div class="flex gap-2">
-                    <button id="scanBtn" class="flex-1 bg-slate-700 hover:bg-slate-600 py-3 rounded-lg text-sm font-medium transition-all active:scale-95 border border-slate-600">
+                    <button id="scanBtn" class="flex-1 bg-slate-700 hover:bg-slate-600 py-3 rounded-lg text-sm font-medium transition-all border border-slate-600">
                         📄 快速掃描文字
                     </button>
-                    <label class="flex-1 bg-slate-700 hover:bg-slate-600 py-3 rounded-lg text-sm font-medium text-center cursor-pointer transition-all active:scale-95 border border-slate-600">
+                    <label class="flex-1 bg-slate-700 hover:bg-slate-600 py-3 rounded-lg text-sm font-medium text-center cursor-pointer transition-all border border-slate-600">
                         📁 上傳圖片
                         <input type="file" id="fileInput" accept="image/*" class="hidden">
                     </label>
@@ -85,19 +102,23 @@
             <!-- 辨識結果 -->
             <div class="bg-slate-900/50 rounded-xl p-4 border border-slate-700 space-y-3">
                 <div class="flex justify-between items-center">
-                    <span id="resultTag" class="text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-slate-800 px-2 py-1 rounded">等待指令</span>
+                    <span id="resultTag" class="text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-slate-800 px-2 py-1 rounded">等待掃描</span>
                     <div class="flex gap-3">
-                        <button id="clearBtn" class="text-xs text-slate-500 hover:text-red-400 transition-colors">清除內容</button>
-                        <button id="copyBtn" class="text-xs text-blue-400 hover:text-blue-300 font-bold hidden">複製內容</button>
+                        <button id="clearBtn" class="text-xs text-slate-500 hover:text-red-400 transition-colors">清除</button>
+                        <button id="copyBtn" class="text-xs text-blue-400 hover:text-blue-300 font-bold hidden">複製全部</button>
                     </div>
                 </div>
                 <div id="resultArea" class="min-h-[140px] max-h-[280px] overflow-y-auto text-slate-200 text-sm leading-relaxed whitespace-pre-wrap">
-                    請對準目標：
-                    • <span class="text-emerald-400">文字/數字</span>：帳單、筆記、發票
-                    • <span class="text-purple-400">物件</span>：水果、動物、植物、日常用品
+                    <span class="text-slate-500 italic">小提醒：辨識手寫字時，請儘量保持鏡頭穩定且光線充足。</span>
                 </div>
             </div>
         </main>
+
+        <footer class="p-4 text-center border-t border-slate-700 bg-slate-800/50">
+            <p class="text-[9px] text-slate-500 uppercase tracking-widest">
+                Handwriting Optimization Engine | System v2.2
+            </p>
+        </footer>
 
         <canvas id="processCanvas" class="hidden"></canvas>
     </div>
@@ -119,26 +140,32 @@
         const copyBtn = document.getElementById('copyBtn');
 
         let isScanning = false;
-        const apiKey = ""; // 執行環境會自動提供
+        const apiKey = ""; 
 
         async function startCamera() {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
+                    video: { 
+                        facingMode: 'environment', 
+                        width: { ideal: 1920 }, 
+                        height: { ideal: 1080 } 
+                    },
                     audio: false 
                 });
                 video.srcObject = stream;
             } catch (err) {
-                resultArea.innerText = "⚠️ 無法開啟相機，請確認 HTTPS 權限。";
+                resultArea.innerHTML = "<span class='text-red-400'>⚠️ 無法開啟相機。請確保使用 HTTPS 並授權相機權限。</span>";
             }
         }
 
         function getBase64Image() {
             const ctx = canvas.getContext('2d');
-            canvas.width = video.videoWidth || 640;
-            canvas.height = video.videoHeight || 480;
+            // 確保擷取解析度與視訊流一致
+            canvas.width = video.videoWidth || 1280;
+            canvas.height = video.videoHeight || 720;
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            return canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
+            // 提升品質到 0.95 減少 OCR 雜訊
+            return canvas.toDataURL('image/jpeg', 0.95).split(',')[1];
         }
 
         async function fetchWithRetry(url, options, retries = 5, backoff = 1000) {
@@ -155,20 +182,19 @@
             }
         }
 
-        // 升級後的 AI 辨識邏輯：包含文字、數字、動物、水果、物件
+        // 專為手寫優化的 AI 辨識邏輯
         async function runSmartAI(base64Data) {
             if (isScanning) return;
             isScanning = true;
             
             statusOverlay.classList.remove('hidden');
             progressContainer.classList.add('hidden');
-            progressLabel.innerText = "AI 正在掃描並分析物體與文字...";
+            progressLabel.innerText = "正在分析手寫字與影像...";
             scanLine.style.display = 'block';
-            scanLine.style.background = 'rgba(168, 85, 247, 0.8)';
 
             try {
-                // 擴充後的 Prompt
-                const prompt = "分析這張圖片並提供以下資訊：\n1. 如果有文字或數字（包括手寫），請提取出來。\n2. 辨識圖片中的主要物件（例如：特定的動物品種、水果種類、植物、或物品名稱）。\n3. 簡短描述畫面內容。\n請以繁體中文條列式輸出，不要有額外開場白。";
+                // 更加強化針對手寫文字的 Prompt
+                const prompt = "你是一個高階 OCR 與視覺專家。請仔細辨識這張圖片：\n1. 【手寫字辨識】：提取所有手寫或印刷的文字與數字。如果字跡潦草，請結合前後文與邏輯（如帳單格式、日期、人名）推論正確文字。不要漏掉任何數字。\n2. 【物件辨識】：描述圖片中看到的動物、水果或重要物品。\n3. 【摘要】：簡短總結。 \n輸出格式：請直接用繁體中文分類列出結果，不要有任何多餘的引言。";
                 
                 const payload = {
                     contents: [{
@@ -192,14 +218,14 @@
                 
                 if (text) {
                     resultArea.innerText = text.trim();
-                    resultTag.innerText = "✨ AI 智慧辨識完成";
+                    resultTag.innerText = "✨ AI 增強辨識完成";
                     resultTag.className = "text-[10px] font-bold text-white uppercase tracking-widest bg-purple-600 px-2 py-1 rounded";
                     copyBtn.classList.remove('hidden');
                 } else {
-                    resultArea.innerText = "AI 掃描完畢，但未發現明顯內容。";
+                    resultArea.innerText = "AI 掃描完畢，但未發現可辨識內容。";
                 }
             } catch (err) {
-                resultArea.innerText = "AI 連線失敗，請檢查網路。";
+                resultArea.innerText = "連線失敗，請檢查網路或 API 狀態。";
             } finally {
                 statusOverlay.classList.add('hidden');
                 scanLine.style.display = 'none';
@@ -207,15 +233,13 @@
             }
         }
 
-        // Tesseract 快速文字辨識
         async function runLocalOCR(base64Data) {
             if (isScanning) return;
             isScanning = true;
             statusOverlay.classList.remove('hidden');
             progressContainer.classList.remove('hidden');
-            progressLabel.innerText = "快速掃描文字中...";
+            progressLabel.innerText = "快速文字辨識中...";
             scanLine.style.display = 'block';
-            scanLine.style.background = 'rgba(34, 197, 94, 0.8)';
 
             try {
                 const worker = await Tesseract.createWorker({
@@ -230,13 +254,13 @@
                 await worker.initialize('chi_tra+eng');
                 const { data: { text } } = await worker.recognize(`data:image/jpeg;base64,${base64Data}`);
                 
-                resultArea.innerText = text.trim() || "未偵測到明顯文字。";
-                resultTag.innerText = "📄 快速文字掃描結果";
+                resultArea.innerText = text.trim() || "未偵測到明顯印刷文字。";
+                resultTag.innerText = "📄 快速掃描完成";
                 resultTag.className = "text-[10px] font-bold text-white uppercase tracking-widest bg-emerald-600 px-2 py-1 rounded";
                 copyBtn.classList.remove('hidden');
                 await worker.terminate();
             } catch (err) {
-                resultArea.innerText = "快速掃描發生錯誤。";
+                resultArea.innerText = "本地辨識失敗。";
             } finally {
                 statusOverlay.classList.add('hidden');
                 scanLine.style.display = 'none';
@@ -248,7 +272,7 @@
         scanBtn.onclick = () => runLocalOCR(getBase64Image());
 
         clearBtn.onclick = () => {
-            resultArea.innerText = "請對準目標，選擇模式開始掃描...";
+            resultArea.innerHTML = "<span class='text-slate-500 italic'>等待下一個目標...</span>";
             copyBtn.classList.add('hidden');
             resultTag.innerText = "等待指令";
             resultTag.className = "text-[10px] font-bold text-slate-500 uppercase tracking-widest bg-slate-800 px-2 py-1 rounded";
